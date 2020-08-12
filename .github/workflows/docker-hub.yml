@@ -1,0 +1,43 @@
+---
+
+name: Publish Docker image
+on:
+  push:
+    tags:
+      - v*.*.*
+jobs:
+  push_to_registry:
+    name: Push image to Docker Hub
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v2
+      - name: Remove prefix 'refs/tags/v' from tag
+        run: |
+          version="${tag##*/v}"
+          echo $version
+          echo "::set-env name=version::$version"
+        env:
+          tag: ${{ github.ref }}
+      - name: Build and publish
+        uses: docker/build-push-action@v1
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+          repository: yurihs/gitlab-ci-ssh
+          tags: ${{ env.version }}
+      - name: Publish semver tags
+        uses: flownative/action-docker-publish-semver@master
+        with:
+          tag_ref: ${{ env.version }}
+          tag_latest: true
+
+          source_image_name: yurihs/gitlab-ci-ssh
+          source_registry_username: ${{ secrets.DOCKER_USERNAME }}
+          source_registry_password: ${{ secrets.DOCKER_PASSWORD }}
+          source_registry_endpoint: https://index.docker.io/v2/
+
+          target_image_name: yurihs/gitlab-ci-ssh
+          target_registry_username: ${{ secrets.DOCKER_USERNAME }}
+          target_registry_password: ${{ secrets.DOCKER_PASSWORD }}
+          target_registry_endpoint: https://index.docker.io/v2/

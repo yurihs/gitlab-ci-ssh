@@ -1,0 +1,131 @@
+#!/bin/sh
+set -e
+
+if [ "$(basename "$0")" != "sh" ] && [ "$(basename "$0")" != "ash" ]; then
+	echo "Error: This script must be sourced, in order to start an SSH agent in the shell. Run \`. setup-ssh\`."
+	exit 1
+fi
+
+log_info() {
+	echo "-----> $*"
+}
+
+log_verbose() {
+	echo "       $*"
+}
+
+log_warn() {
+	echo " !     $*" 1>&2
+}
+
+log_fail() {
+	echo "$@" 1>&2
+	exit 1
+}
+
+print_usage() {
+	echo "Usage:"
+	echo ""
+	echo "    . setup-ssh --host a-server --user a-user --private-key \"\$(cat a_private_key)\""
+	echo ""
+	echo "Required arguments:"
+	echo "    --host <hostname>"
+	echo "    --user <username>"
+	echo "    --private-key <private-key>"
+	echo ""
+	echo "Optional arguments:"
+	echo "    --port <port>         defaults to 22"
+	echo "    --host-key <host-key> will do a keyscan if not provided"
+	echo "    --local-name <name>   nickname written to SSH config. defaults to \"remote\""
+	echo "    --help                you are here"
+}
+
+print_usage_and_fail() {
+	print_usage
+	exit 1
+}
+
+# Fail if no arguments provided
+[ -z "$1" ] && print_usage_and_fail
+
+# Parse arguments
+OPTIONS=$(getopt -l help,host:,host-key:,local-name:,port:,private-key:,user: -- "h" "$@") || exit 1
+eval set -- "$OPTIONS"
+while true; do
+	case "$1" in
+	-h|--help)
+		print_usage_and_fail
+		shift;;
+	--host)
+		HOST="$2"
+		shift 2;;
+	--host-key)
+		HOST_KEY="$2"
+		shift 2;;
+	--local-name)
+		LOCAL_NAME="$2"
+		shift 2;;
+	--port)
+		PORT="$2"
+		shift 2;;
+	--private-key)
+		PRIVATE_KEY="$2"
+		shift 2;;
+	--user)
+		SSH_USER="$2"
+		shift 2;;
+	--)
+		shift
+		break;;
+	*)
+		log_fail "Unexpected argument \"$1\""
+		;;
+	esac
+done
+
+# Fail if required arguments not provided
+[ -z "$HOST" ] && print_usage_and_fail "You must provide a host."
+[ -z "$LOCAL_NAME" ] && LOCAL_NAME="remote"
+[ -z "$PORT" ] && PORT="22"
+[ -z "$PRIVATE_KEY" ] && print_usage_and_fail "You must provide a private key."
+[ -z "$SSH_USER" ] && print_usage_and_fail "You must provide a user."
+
+
+log_info "Setting up SSH client"
+
+mkdir -p "$HOME/.ssh"
+chmod 700 "$HOME/.ssh"
+
+# Attempt to run a keyscan if host key not provided
+if [ -z "$HOST_KEY" ]; then
+	log_warn "Host key not specified, running keyscan on port $PORT:"
+	HOST_KEY="$(ssh-keyscan -p $PORT "$HOST" 2>/dev/null || true)"
+	[ -z "$HOST_KEY" ] && log_fail "Keyscan failed."
+	log_verbose "Host key(s) found:"
+else
+	log_verbose "Host key:"
+fi
+# Output the host key(s) for auditing purposes
+echo "$HOST_KEY" | tee -a "$HOME/.ssh/known_hosts"
+chmod 600 "$HOME/.ssh/known_hosts"
+
+
+log_info "Starting SSH agent"
+eval "$(ssh-agent)" >/dev/null
+
+log_verbose "Adding private key"
+if ! echo "$PRIVATE_KEY" | tr -d '\r' | ssh-add -; then
+	log_fail "Failed to add private key to agent."
+fi
+
+log_info "Writing to SSH config"
+cat >>"$HOME/.ssh/config" <<EOL
+Host $LOCAL_NAME
+	Hostname $HOST
+	Port $PORT
+	User $SSH_USER
+    LogLevel error
+EOL
+chmod 600 "$HOME/.ssh/config"
+
+log_info "Done. Use \`ssh $LOCAL_NAME\` to connect."
