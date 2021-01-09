@@ -16,7 +16,7 @@ jobs:
         run: |
           version="${tag##*/v}"
           echo $version
-          echo "::set-env name=version::$version"
+          echo "version=$version" >> $GITHUB_ENV
         env:
           tag: ${{ github.ref }}
       - name: Build and publish
