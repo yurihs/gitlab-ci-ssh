@@ -1,6 +1,6 @@
 # gitlab-ci-ssh
 
-![Image size](https://img.shields.io/docker/image-size/yurihs/gitlab-ci-ssh/latest)
+[![Image size](https://img.shields.io/docker/image-size/yurihs/gitlab-ci-ssh/latest)](https://hub.docker.com/r/yurihs/gitlab-ci-ssh)
 
 This image is meant to be used in a GitLab CI job.
 
